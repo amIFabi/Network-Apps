@@ -28,7 +28,6 @@ class workshop:
 				self.min_sleeves.notify()
 
 	def remove_sleeves(self):
-		time.sleep(5)
 		with self.min_sleeves:
 			while(not self.sleeves > 1):
 				logging.debug("Waiting for sleeves...")

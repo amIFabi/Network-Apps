@@ -1,4 +1,4 @@
-import socket, time, threading, pickle, logging
+import socket, time, threading, pickle, logging, math
 import numpy as np
 from game import memory
 
@@ -7,26 +7,24 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(message)s',)
 class server:
 
 	buffer_size = 1024
-	lock = threading.RLock()
-	# server_addr = ("127.0.0.1", 65432)
-	# clients = []
-	# threads = []
-	# game = memory()
-	# player_slots = 2
-	# barrier = threading.Barrier(2)
+	turn = threading.Condition()
+	player = 1
+	move_board = ""
 
 	def __init__(self, host="127.0.0.1", port=65432):
 		self.server_addr = (host, port)
 		self.clients = []
 		self.threads = []
-		print("Choose difficulty: ")
-		print("1) 4 x 4: ")
-		print("2) 6 x 6: ")
-		diff = int(input())
-		self.game = memory(diff)
+		# print("Choose difficulty: ")
+		# print("1) 4 x 4: ")
+		# print("2) 6 x 6: ")
+		# diff = int(input())
+		# self.game = memory(diff)
+		self.game = memory()
 
-		print("How many players: ")
-		self.player_slots = int(input())
+		# print("How many players: ")
+		# self.player_slots = int(input())
+		self.player_slots = 2
 		self.barrier = threading.Barrier(self.player_slots)
 		
 		with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as tcp_socket:
@@ -41,7 +39,6 @@ class server:
 		try:
 			while self.player_slots:
 				client_conn, client_addr = tcp_socket.accept()
-
 				self.player_slots -= 1
 				if(self.player_slots):
 					logging.debug("Waiting for " + str(self.player_slots))
@@ -66,23 +63,33 @@ class server:
 			if(connection.fileno() == -1):
 				self.clients.remove(connection)
 
-	def playing(self, conn, addr):
-		try:
-			self.barrier.wait()
-			while(not self.game.winner):
-				self.lock.acquire()
-				conn.sendall(pickle.dumps("Your turn..."))
-				player = self.game.get_player(addr[1])
-				logging.debug("Player " + str(player) + " turn...")
-				
+	def move(self, conn, addr):
+		with self.turn:
+			if(self.game.get_player(addr[1]) == self.player):
+				conn.sendall(pickle.dumps("Your turn"))
 				data = conn.recv(self.buffer_size)
 				points = pickle.loads(data)
 				point1, point2 = get_points(points)
 				
-				data = make_move(self.game, point1, point2, addr[1])
-				conn.sendall(data)
-				self.lock.release()
-				time.sleep(5)
+				# data = make_move(self.game, point1, point2, addr[1])
+				self.move_board = make_move(self.game, point1, point2, addr[1])
+				# conn.sendall(data)
+
+				self.player %= len(self.clients)
+				self.player += 1
+				logging.debug("Player %s turn", self.player)
+				self.turn.notify()
+				# time.sleep(5)
+			else:
+				self.turn.wait()
+
+	def playing(self, conn, addr):
+		try:
+			self.barrier.wait()
+			while(not self.game.winner):
+				self.move(conn, addr)
+				for i in self.clients:
+					i.sendall(pickle.dumps(self.move_board))
 			
 			conn.sendall(pickle.dumps("Game finished"))
 
@@ -103,26 +110,14 @@ def make_move(game, point1, point2, player):
 
 	if(msg == "Invalid move"):
 		msg += ", "
-		data = pickle.dumps(msg)
+		# data = pickle.dumps(msg)
 	else:
 		board = game.str_board_move(point1, point2)
 		msg += "," + board
 		score = game.count_scores()
 		msg += score
-		data = pickle.dumps(msg)
-		
-	return data
+		# data = pickle.dumps(msg)
 
-def make_random_move(game):
-	msg, move = game.random_move()
-	if(msg == "Invalid move"):
-		data = pickle.dumps(msg)
-	else:
-		msg += "," + move
-		score = game.count_scores()
-		msg += score
-		data = pickle.dumps(msg)
-
-	return data
+	return msg
 
 serv = server()

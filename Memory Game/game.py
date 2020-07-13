@@ -7,6 +7,7 @@ class memory:
 	players = []
 	
 	def __init__(self, difficulty=4):
+		self.difficulty = difficulty
 		self.board = np.zeros((difficulty ** 2), dtype=np.uint8)
 		self.score = np.zeros((difficulty ** 2), dtype=np.uint8)
 		self.pairs = int((difficulty ** 2) / 2)
@@ -66,3 +67,28 @@ class memory:
 
 	def check_winner(self):
 		self.winner = (np.count_nonzero(self.score) < len(self.score))
+	
+	def str_board_move(self, point1, point2):
+		strboardmove = ""
+		i = 0
+		for y in range(self.difficulty):
+			row = ""
+			for x in range(self.difficulty):
+				if(i == self.get_position(point1) or i == self.get_position(point2) or self.score[i] != 0):
+					row += str(self.board[i]) + " "
+				else:
+					row += "x "
+				i += 1
+			
+			strboardmove += row
+			strboardmove += ","
+		
+		return strboardmove
+
+	def count_scores(self):
+		score = ""
+		for i in (self.players):
+			points = int(np.count_nonzero(self.score == self.get_player(i)) / 2)
+			score += "p" + str(self.get_player(i)) + ": " + str(points) + " "
+		
+		return score
